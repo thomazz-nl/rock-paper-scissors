@@ -1,0 +1,629 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta http-equiv="X-UA-Compatible" content="ie=edge">
+    <title>RPS Helper</title>
+    <script type="application/javascript">
+        'use strict';
+
+        var RockPaperScissors = function()
+        {
+            /* Private variables */
+            let currentFloor                = 0;
+            let currentRound                = 0;
+            let remaining                   = {
+                rocks: 3,
+                papers: 3,
+                scissors: 3
+            };
+            let result                      = {
+                wins: 0,
+                draws: 0,
+                loses: 0
+            };
+
+            let currentResultsElem          = document.querySelector('#results .currentresults');
+            let currentRoundElem            = document.querySelector('#round .currentround');
+            let reasoningElem               = document.querySelector('#reasoning');
+            let suggestionElements          = document.querySelectorAll('#suggestions .rps-image');
+            let pickElements                = document.querySelectorAll('#picks .rps-image');
+            let historyRoundTemplateElem    = document.querySelector('#history > .round.template');
+
+            /* Private methods */
+            function chanceToString(chance)
+            {
+                return (chance * 100).toFixed(1) + '%';
+            }
+
+            function findBestChances()
+            {
+                let remainingTotal      = remaining.rocks + remaining.papers + remaining.scissors;
+                let chance              = {
+                    'rock': {
+                        'value':    remaining.rocks / remainingTotal,
+                        'toString': function() { return chanceToString(this.value); }
+                    },
+                    'paper': {
+                        'value':    remaining.papers / remainingTotal,
+                        'toString': function() { return chanceToString(this.value); }
+                    },
+                    'scissors': {
+                        'value':    remaining.scissors / remainingTotal,
+                        'toString': function() { return chanceToString(this.value); }
+                    }
+                };
+                let bestChoice          = {
+                    'option': 'unset',
+                    'reason': 'unset'
+                };
+                let highestProbability  = Math.max(chance.rock.value, chance.paper.value, chance.scissors.value);
+
+                if (chance.rock.value == chance.paper.value && chance.paper.value == chance.scissors.value)
+                {
+                    bestChoice.option = 'equal';
+                    bestChoice.reason = `all odds are equal (${chance.rock}).`;
+                }
+
+                else
+                {
+                    if (highestProbability == chance.rock.value)
+                    {
+                        if (chance.rock.value == chance.scissors.value)
+                        {
+                            if (currentFloor > 0)
+                            {
+                                bestChoice.option = 'rock';
+                                bestChoice.reason = `this is the safest pick (${chance.rock}).`;
+                            }
+
+                            else
+                            {
+                                bestChoice.option = 'no-paper';
+                                bestChoice.reason = `at groundlevel, so skipping safety and chances are equal (${chance.rock}).`;
+                            }
+                        }
+
+                        else if (chance.rock.value == chance.paper.value)
+                        {
+                            if (currentFloor > 0)
+                            {
+                                bestChoice.option = 'paper';
+                                bestChoice.reason = `this is the safest pick (${chance.rock}).`;
+                            }
+
+                            else
+                            {
+                                bestChoice.option = 'no-scissors';
+                                bestChoice.reason = `at groundlevel, so skipping safety and chances are equal (${chance.rock}).`;
+                            }
+                        }
+
+                        else
+                        {
+                            bestChoice.option = 'paper';
+                            bestChoice.reason = `this is ${chance.rock.value == 1 ? 'guaranteed' : 'the most likely'} to win (${chance.rock}).`
+                        }
+                    }
+
+                    else if (highestProbability == chance.paper.value)
+                    {
+                        if (chance.paper.value == chance.rock.value)
+                        {
+                            if (currentFloor > 0)
+                            {
+                                bestChoice.option = 'paper';
+                                bestChoice.reason = `this is the safest pick (${chance.paper}).`;
+                            }
+
+                            else
+                            {
+                                bestChoice.option = 'no-scissors';
+                                bestChoice.reason = `at groundlevel, so skipping safety and chances are equal (${chance.paper}).`;
+                            }
+                        }
+
+                        else if (chance.paper.value == chance.scissors.value)
+                        {
+                            if (currentFloor > 0)
+                            {
+                                bestChoice.option = 'scissors';
+                                bestChoice.reason = `this is the safest pick (${chance.paper}).`;
+                            }
+
+                            else
+                            {
+                                bestChoice.option = 'no-rock';
+                                bestChoice.reason = `at groundlevel, so skipping safety and chances are equal (${chance.paper}).`;
+                            }
+                        }
+
+                        else
+                        {
+                            bestChoice.option = 'scissors';
+                            bestChoice.reason = `this is ${chance.paper.value == 1 ? 'guaranteed' : 'the most likely'} to win (${chance.paper}).`
+                        }
+                    }
+
+                    else if (highestProbability == chance.scissors.value)
+                    {
+                        if (chance.scissors.value == chance.paper.value)
+                        {
+                            if (currentFloor > 0)
+                            {
+                                bestChoice.option = 'scissors';
+                                bestChoice.reason = `this is the safest pick (${chance.scissors}).`;
+                            }
+
+                            else
+                            {
+                                bestChoice.option = 'no-rock';
+                                bestChoice.reason = `at groundlevel, so skipping safety and chances are equal (${chance.scissors}).`;
+                            }
+                        }
+
+                        else if (chance.scissors.value == chance.rock.value)
+                        {
+                            if (currentFloor > 0)
+                            {
+                                bestChoice.option = 'rock';
+                                bestChoice.reason = `this is the safest pick (${chance.scissors}).`;
+                            }
+
+                            else
+                            {
+                                bestChoice.option = 'no-rock';
+                                bestChoice.reason = `at groundlevel, so skipping safety and chances are equal (${chance.scissors}).`;
+                            }
+                        }
+
+                        else
+                        {
+                            bestChoice.option = 'rock';
+                            bestChoice.reason = `this is ${chance.scissors.value == 1 ? 'guaranteed' : 'the most likely'} to win (${chance.scissors}).`
+                        }
+                    }
+                }
+
+                return bestChoice;
+            }
+
+            function updateSuggestion(bestChoice)
+            {
+                suggestionElements.forEach((element) => {
+                    element.classList.remove('our-choice');
+                    element.classList.add('hidden');
+                });
+
+                switch (bestChoice.option)
+                {
+                    case 'rock':
+                        suggestionElements.item(0).classList.remove('hidden');
+                        suggestionElements.item(0).classList.add('our-choice');
+                        reasoningElem.textContent = 'Reasoning: ' + bestChoice.reason;
+                        break;
+                    case 'paper':
+                        suggestionElements.item(1).classList.remove('hidden');
+                        suggestionElements.item(1).classList.add('our-choice');
+                        reasoningElem.textContent = 'Reasoning: ' + bestChoice.reason;
+                        break;
+                    case 'scissors':
+                        suggestionElements.item(2).classList.remove('hidden');
+                        suggestionElements.item(2).classList.add('our-choice');
+                        reasoningElem.textContent = 'Reasoning: ' + bestChoice.reason;
+                        break;
+                    case 'no-rock':
+                        suggestionElements.item(1).classList.remove('hidden');  // paper
+                        suggestionElements.item(1).classList.add('make-a-choice');
+                        suggestionElements.item(2).classList.remove('hidden');  // scissors
+                        suggestionElements.item(2).classList.add('make-a-choice');
+                        reasoningElem.textContent = 'Reasoning: ' + bestChoice.reason;
+                        break;
+                    case 'no-paper':
+                        suggestionElements.item(0).classList.remove('hidden');  // rock
+                        suggestionElements.item(0).classList.add('make-a-choice');
+                        suggestionElements.item(2).classList.remove('hidden');  // scissors
+                        suggestionElements.item(2).classList.add('make-a-choice');
+                        reasoningElem.textContent = 'Reasoning: ' + bestChoice.reason;
+                        break;
+                    case 'no-scissors':
+                        suggestionElements.item(0).classList.remove('hidden');  // rock
+                        suggestionElements.item(0).classList.add('make-a-choice');
+                        suggestionElements.item(1).classList.remove('hidden');  // paper
+                        suggestionElements.item(1).classList.add('make-a-choice');
+                        reasoningElem.textContent = 'Reasoning: ' + bestChoice.reason;
+                        break;
+                    default:
+                        suggestionElements.forEach((element) => {
+                            element.classList.add('make-a-choice');
+                            element.classList.remove('hidden');
+                        });
+                        reasoningElem.textContent = 'Reasoning: ' + bestChoice.reason;
+                        break;
+                }
+            }
+
+
+            /* Public methods */
+            this.nextRound = function(opposingPickElem)
+            {
+                let ourChoiceElem = document.querySelector('#suggestions .rps-image.our-choice');
+
+                // If not passed the last round and not out of attempts for the chosen option.
+                if (currentRound < 9 && ourChoiceElem && opposingPickElem.querySelector('.remaining').textContent > 0)
+                {
+                    let lastRoundResultElem = historyRoundTemplateElem.cloneNode(true);
+                    let lastRoundChoiceElem = lastRoundResultElem.querySelector('.rps-image.' + opposingPickElem.title);
+
+                    currentRound++;
+
+                    if (currentRound == 1)
+                    {
+                        historyRoundTemplateElem.parentElement.classList.remove('hidden');
+                    }
+
+
+                    if (ourChoiceElem.title == opposingPickElem.title)
+                    {
+                        result.draws++;
+                        lastRoundChoiceElem.classList.add('draw');
+                    }
+
+                    else
+                    {
+                        switch (ourChoiceElem.title)
+                        {
+                            case 'rock':
+                                if (opposingPickElem.title == "scissors")
+                                {
+                                    result.wins++;
+                                    currentFloor = currentFloor < 5 ? currentFloor + 1 : 5;
+                                    lastRoundChoiceElem.classList.add('won');
+                                }
+
+                                else
+                                {
+                                    result.loses++;  //paper
+                                    currentFloor = currentFloor > 0 ? currentFloor - 1 : 0;
+                                    lastRoundChoiceElem.classList.add('lost');
+                                }
+
+                                break;
+                            case 'paper':
+                                if (opposingPickElem.title == "rock")
+                                {
+                                    result.wins++;
+                                    currentFloor = currentFloor < 5 ? currentFloor + 1 : 5;
+                                    lastRoundChoiceElem.classList.add('won');
+                                }
+
+                                else
+                                {
+                                    result.loses++; // scissors
+                                    currentFloor = currentFloor > 0 ? currentFloor - 1 : 0;
+                                    lastRoundChoiceElem.classList.add('lost');
+                                }
+
+                                break;
+                            case 'scissors':
+                                if (opposingPickElem.title == "paper")
+                                {
+                                    result.wins++;
+                                    currentFloor = currentFloor < 5 ? currentFloor + 1 : 5;
+                                    lastRoundChoiceElem.classList.add('won');
+                                }
+
+                                else
+                                {
+                                    result.loses++; // rock
+                                    currentFloor = currentFloor > 0 ? currentFloor - 1 : 0;
+                                    lastRoundChoiceElem.classList.add('lost');
+                                }
+
+                                break;
+                            default:
+                                break;
+                        }
+                    }
+
+                    currentResultsElem.textContent = `${result.wins}/${result.draws}/${result.loses}`;
+                    lastRoundResultElem.classList.remove('template');
+                    lastRoundResultElem.firstElementChild.textContent = `Round ${currentRound}`;
+                    historyRoundTemplateElem.parentElement.insertBefore(lastRoundResultElem, historyRoundTemplateElem.parentElement.children[1]);
+
+                    switch (opposingPickElem.title)
+                    {
+                        case 'rock':
+                            if (remaining.rocks > 0)
+                            {
+                                remaining.rocks--;
+                                opposingPickElem.querySelector('.remaining').textContent = remaining.rocks;
+                                opposingPickElem.style.filter = `grayscale(${chanceToString(1-remaining.rocks/3)})`;
+                                if(remaining.rocks == 0) { opposingPickElem.classList.toggle('inactive'); }
+                            }
+                            break;
+                        case 'paper':
+                            if (remaining.papers > 0)
+                            {
+                                remaining.papers--;
+                                opposingPickElem.querySelector('.remaining').textContent = remaining.papers;
+                                opposingPickElem.style.filter = `grayscale(${chanceToString(1-remaining.papers/3)})`;
+                                if (remaining.papers == 0) { opposingPickElem.classList.toggle('inactive'); }
+                            }
+                            break;
+                        case 'scissors':
+                            if (remaining.scissors > 0)
+                            {
+                                remaining.scissors--;
+                                opposingPickElem.querySelector('.remaining').textContent = remaining.scissors;
+                                opposingPickElem.style.filter = `grayscale(${chanceToString(1-remaining.scissors/3)})`;
+                                if (remaining.scissors == 0) { opposingPickElem.classList.toggle('inactive'); }
+                            }
+                            break;
+                        default:
+                            return;
+                    }
+                    
+                    //console.log('currentFloor: ' + currentFloor);
+                    
+                    // If this was the last round, adjust UI for gameover.
+                    if (currentRound == 9)
+                    {
+                        document.querySelectorAll('#round, #gameover, #suggestions, #picks, #reset').forEach((element) => { element.classList.toggle('hidden'); });
+                    }
+
+                    // If this was not the last round, adjust UI for next round and find the best chances.
+                    else
+                    {
+                        currentRoundElem.textContent = currentRound+1;
+                        updateSuggestion(findBestChances());
+                    }
+                }
+            }
+
+            this.reset = function() {
+                currentFloor        = 0;
+                currentRound        = 0;
+                remaining.rocks     = 3;
+                remaining.papers    = 3;
+                remaining.scissors  = 3;
+                result.wins         = 0;
+                result.draws        = 0;
+                result.loses        = 0;
+
+                suggestionElements.forEach((element) => {
+                    element.classList.add('make-a-choice');
+                    element.classList.remove('our-choice', 'hidden');
+                });
+                
+                pickElements.forEach((element) => {
+                    element.attributes.removeNamedItem('style');
+                    element.classList.remove('inactive');
+                    element.querySelector('.remaining').textContent = 3;
+                });
+
+                currentResultsElem.textContent  = '0/0/0';
+                currentRoundElem.textContent    = currentRound+1;
+                reasoningElem.textContent       = 'Reasoning: all odds are equal (33.3%).';
+                historyRoundTemplateElem.parentElement.querySelectorAll('.round:not(.template)').forEach((element) => { element.remove(); });
+                document.querySelectorAll('#round, #gameover, #suggestions, #picks, #reset, #history').forEach((element) => { element.classList.toggle('hidden'); });
+            }
+
+            /* Constructor */
+            suggestionElements.forEach((element) => {
+                element.addEventListener('click', (event) => {
+                    event.preventDefault();
+                    suggestionElements.forEach((element) => { element.classList.remove('make-a-choice', 'our-choice'); });
+                    event.currentTarget.classList.add('our-choice');
+                });
+            });
+            pickElements.forEach((element) => {
+                element.addEventListener('click', (event) => {
+                    event.preventDefault();
+                    this.nextRound(event.currentTarget);
+                });
+            });
+        }
+
+        document.addEventListener('DOMContentLoaded', (event) => {
+            window.rps = new RockPaperScissors();
+            document.querySelector('#reset > button').addEventListener('click', rps.reset);
+        }, false);
+    </script>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: #000;
+        }
+
+        h1 {
+            color: orange;
+            text-align: center;
+        }
+
+        .hidden {
+            display: none !important;
+        }
+
+        .rps-image {
+            display: inline-block;
+            height: 54px;
+            width: 54px;
+        }
+
+        .rps-image.rock {
+            background-image: url('data:image/png;base64,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');
+        }
+
+        .rps-image.paper {
+            background-image: url('data:image/png;base64,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');
+        }
+
+        .rps-image.scissors {
+            background-image: url('data:image/png;base64,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');
+        }
+
+        #intro {
+            background: white;
+            border-radius: 10px;
+            font-style: italic;
+            margin: 0 auto 15px;
+            max-width: 400px;
+            padding: 10px;
+        }
+
+        #container {
+            background: white;
+            border-radius: 10px;
+            margin: 0 auto;
+            max-width: 400px;
+            padding: 10px;
+        }
+
+        #results {
+            float: left;
+            font-weight: 800;
+        }
+
+        #gameover,
+        #round {
+            font-weight: 800;
+            text-align: right;
+        }
+
+        #gameover {
+            color: red;
+        }
+
+        #suggestions,
+        #picks,
+        #history,
+        #reset
+        {
+            text-align: center;
+        }
+
+        @keyframes blink { 50% { opacity: 100%; }  }
+        #suggestions .rps-image.make-a-choice,
+        #picks .rps-image.make-a-choice {
+            animation: blink 1s infinite;
+            opacity: 20%;
+        }
+
+        #picks .rps-image {
+            position: relative;
+        }
+
+        #picks .rps-image.inactive {
+            cursor: default;
+        }
+
+        #picks .rps-image .remaining {
+            bottom: 5px;
+            left: 5px;
+            color: white;
+            font-weight: 800;
+            position: absolute;
+            text-shadow: -1px -1px 0 #000, 1px -1px 0 #000, -1px 1px 0 #000, 1px 1px 0 #000;
+        }
+
+        #history .round {
+            position: relative;
+        }
+
+        #history .round.template {
+            display: none;
+        }
+
+        #history .round h5 {
+            height: 54px;
+            left: 15px;
+            line-height: 54px;
+            margin: 0;
+            position: absolute;
+        }
+
+        #suggestions .rps-image:not(.make-a-choice):not(.our-choice),
+        #history .rps-image:not(.won):not(.draw):not(.lost) {
+            filter: grayscale(100%);
+        }
+
+        #history .rps-image.won {
+            background-color: rgba(0, 255, 0, 0.4);
+            position: relative;
+        }
+
+        #history .rps-image.draw {
+            background-color: rgba(255, 165, 0, 0.3);
+            position: relative;
+        }
+
+        #history .rps-image.lost {
+            background-color: rgba(255, 0, 0, 0.5);
+            position: relative;
+        }
+
+        #history .rps-image.won:after,
+        #history .rps-image.draw:after,
+        #history .rps-image.lost:after {
+            content: " ";
+            background-color: inherit;
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+        }
+
+        #reset {
+            margin-top: 10px;
+        }
+    </style>
+</head>
+<body>
+    <h1>Rock Paper Scissor helper</h1>
+    <div id="intro">Given a repeated game (9 rounds) of rock, paper, scissors versus an opponent that has to choose each option exactly 3 times, this tool helps you get the best outcome.</div>
+    <div id="container">
+        <div id="results">Results (w/d/l): <span class="currentresults">0/0/0</span></div>
+        <div id="round">Round: <span class="currentround">1</span>/9</div>
+        <div id="gameover" class="hidden">game over</div>
+        <section id="suggestions">
+            <h2>1. Your choice?!</h2>
+            <div>
+                <a href="#" class="rps-image rock make-a-choice" role="img" aria-label="rock" title="rock"></a>
+                <a href="#" class="rps-image paper make-a-choice" role="img" aria-label="paper" title="paper"></a>
+                <a href="#" class="rps-image scissors make-a-choice" role="img" aria-label="scissors" title="scissors"></a>
+            </div>
+            <div id="reasoning">Reasoning: all odds are equal (33.3%).</div>
+        </section>
+        <section id="picks">
+            <h2>2. What did your opponent pick?</h2>
+            <div>
+                <a href="#" class="rps-image rock" role="img" aria-label="rock" title="rock">
+                    <div class="remaining">3</div>
+                </a>
+                <a href="#" class="rps-image paper" role="img" aria-label="paper" title="paper">
+                    <div class="remaining">3</div>
+                </a>
+                <a href="#" class="rps-image scissors" role="img" aria-label="scissors" title="scissors">
+                    <div class="remaining">3</div>
+                </a>
+            </div>
+            <div id="instructions">Click what your opponent picked this round.</div>
+        </section>
+        <section id="history" class="hidden">
+            <h2>Previous rounds</h2>
+            <div class="round template">
+                <h5>Round 1</h5>
+                <div class="rps-image rock" role="img" aria-label="rock" title="rock"></div>
+                <div class="rps-image paper" role="img" aria-label="paper" title="paper"></div>
+                <div class="rps-image scissors" role="img" aria-label="scissors" title="scissors"></div>
+            </div>
+        </section>
+        <section id="reset" class="hidden">
+            <button>Restart</button>
+        </section>
+    </div>
+</body>
+</html>
